@@ -35,8 +35,10 @@ type AccountStore interface {
 // ACMEIssuerFactory returns a newIssuer function suitable for NewRunner. On first
 // call it loads the ACME account from Postgres (or generates one if absent),
 // registers it if needed using email, persists the account, and returns an
-// Issuer bound to a lego client for the given directory URL.
-func ACMEIssuerFactory(as AccountStore, directoryURL, email string, log *slog.Logger) func(ctx context.Context) (Issuer, error) {
+// Issuer bound to a lego client for the given directory URL. disableRecursiveCheck
+// is passed through to the lego client to skip the recursive DNS-01 propagation
+// precheck.
+func ACMEIssuerFactory(as AccountStore, directoryURL, email string, log *slog.Logger, disableRecursiveCheck bool) func(ctx context.Context) (Issuer, error) {
 	return func(ctx context.Context) (Issuer, error) {
 		stored, ok, err := as.GetAccount(ctx)
 		if err != nil {
@@ -59,7 +61,7 @@ func ACMEIssuerFactory(as AccountStore, directoryURL, email string, log *slog.Lo
 			}
 		}
 
-		client, err := acme.NewClient(account, directoryURL)
+		client, err := acme.NewClient(account, directoryURL, disableRecursiveCheck)
 		if err != nil {
 			return nil, err
 		}

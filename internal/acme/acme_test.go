@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	lacme "github.com/go-acme/lego/v5/acme"
+	"github.com/go-acme/lego/v5/challenge/dns01"
 )
 
 func TestAccountKeyRoundTrip(t *testing.T) {
@@ -76,14 +77,37 @@ func TestLoadAccountWithRegistration(t *testing.T) {
 }
 
 func TestObtainUnknownProvider(t *testing.T) {
-	a, _ := NewAccount("ops@example.com")
-	c, err := NewClient(a, "https://acme-staging-v02.api.letsencrypt.org/directory")
-	if err != nil {
-		t.Fatalf("NewClient: %v", err)
+	// Both with and without the recursive-check skip, an unrecognized provider
+	// must fail fast with no network call.
+	for _, disableRecursive := range []bool{false, true} {
+		a, _ := NewAccount("ops@example.com")
+		c, err := NewClient(a, "https://acme-staging-v02.api.letsencrypt.org/directory", disableRecursive)
+		if err != nil {
+			t.Fatalf("NewClient(disableRecursive=%v): %v", disableRecursive, err)
+		}
+		_, err = c.Obtain(context.Background(), "definitely-not-a-provider", []string{"example.com"})
+		if err == nil {
+			t.Fatalf("disableRecursive=%v: expected error for unknown DNS provider", disableRecursive)
+		}
 	}
-	// An unrecognized provider must fail fast, with no network call.
-	_, err = c.Obtain(context.Background(), "definitely-not-a-provider", []string{"example.com"})
-	if err == nil {
-		t.Fatal("expected error for unknown DNS provider")
+}
+
+func TestConfigureDNSResolvers(t *testing.T) {
+	// ConfigureDNSResolvers swaps lego's process-global resolver client; restore
+	// the original afterward so it cannot leak into other tests.
+	before := dns01.DefaultClient()
+	t.Cleanup(func() { dns01.SetDefaultClient(before) })
+
+	// No-op when both args are zero: the global client must be untouched so lego
+	// keeps its default behavior.
+	ConfigureDNSResolvers(nil, 0)
+	if dns01.DefaultClient() != before {
+		t.Fatal("ConfigureDNSResolvers(nil, 0) should be a no-op")
+	}
+
+	// Setting resolvers installs a new global client.
+	ConfigureDNSResolvers([]string{"9.9.9.9", "1.1.1.1:53"}, 0)
+	if dns01.DefaultClient() == before {
+		t.Fatal("ConfigureDNSResolvers with resolvers should replace the default client")
 	}
 }

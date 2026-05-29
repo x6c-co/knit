@@ -1,6 +1,7 @@
 package config
 
 import (
+	"slices"
 	"testing"
 	"time"
 )
@@ -49,9 +50,22 @@ func TestLoadRenewDefaultsAndOverrides(t *testing.T) {
 	if r.ACMEDirectory != DefaultACMEDirectory {
 		t.Errorf("ACMEDirectory = %q", r.ACMEDirectory)
 	}
+	// DNS-01 precheck controls default to off/unset.
+	if len(r.DNSResolvers) != 0 {
+		t.Errorf("DNSResolvers = %v, want empty", r.DNSResolvers)
+	}
+	if r.DNSTimeout != 0 {
+		t.Errorf("DNSTimeout = %v, want 0", r.DNSTimeout)
+	}
+	if r.DNSDisableRecursiveCheck {
+		t.Error("DNSDisableRecursiveCheck = true, want false by default")
+	}
 
 	t.Setenv("KNIT_RENEW_THRESHOLD_DAYS", "7")
 	t.Setenv("KNIT_RENEW_INTERVAL", "1h")
+	t.Setenv("KNIT_DNS_RESOLVERS", "1.1.1.1, 9.9.9.9:53 ,")
+	t.Setenv("KNIT_DNS_TIMEOUT", "15s")
+	t.Setenv("KNIT_DNS_DISABLE_RECURSIVE_CHECK", "true")
 	r, err = LoadRenew()
 	if err != nil {
 		t.Fatalf("LoadRenew override: %v", err)
@@ -61,6 +75,25 @@ func TestLoadRenewDefaultsAndOverrides(t *testing.T) {
 	}
 	if r.Interval != time.Hour {
 		t.Errorf("Interval = %v, want 1h", r.Interval)
+	}
+	// Resolvers are split, trimmed, and empties dropped.
+	if want := []string{"1.1.1.1", "9.9.9.9:53"}; !slices.Equal(r.DNSResolvers, want) {
+		t.Errorf("DNSResolvers = %v, want %v", r.DNSResolvers, want)
+	}
+	if r.DNSTimeout != 15*time.Second {
+		t.Errorf("DNSTimeout = %v, want 15s", r.DNSTimeout)
+	}
+	if !r.DNSDisableRecursiveCheck {
+		t.Error("DNSDisableRecursiveCheck = false, want true")
+	}
+}
+
+func TestLoadRenewBadBool(t *testing.T) {
+	t.Setenv("KNIT_DB_URL", "postgres://x")
+	t.Setenv("KNIT_VALKEY_URL", "redis://x")
+	t.Setenv("KNIT_DNS_DISABLE_RECURSIVE_CHECK", "not-a-bool")
+	if _, err := LoadRenew(); err == nil {
+		t.Fatal("expected error for invalid bool")
 	}
 }
 

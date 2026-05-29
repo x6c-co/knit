@@ -5,6 +5,7 @@ import (
 	"flag"
 	"log/slog"
 
+	"github.com/x6c-co/knit/internal/acme"
 	"github.com/x6c-co/knit/internal/config"
 	"github.com/x6c-co/knit/internal/renew"
 	"github.com/x6c-co/knit/internal/store"
@@ -24,6 +25,10 @@ func runRenew(args []string, log *slog.Logger) error {
 		return err
 	}
 
+	// Apply DNS-01 propagation-precheck resolver overrides (if any) before any
+	// issuance: this mutates lego's process-global resolver client.
+	acme.ConfigureDNSResolvers(cfg.DNSResolvers, cfg.DNSTimeout)
+
 	ctx := context.Background()
 	s, err := store.Open(ctx, cfg.DBURL)
 	if err != nil {
@@ -38,7 +43,7 @@ func runRenew(args []string, log *slog.Logger) error {
 	defer func() { _ = vk.Close() }()
 
 	runner := renew.NewRunner(s, vk, log, cfg.ThresholdDays,
-		renew.ACMEIssuerFactory(s, cfg.ACMEDirectory, cfg.ACMEEmail, log))
+		renew.ACMEIssuerFactory(s, cfg.ACMEDirectory, cfg.ACMEEmail, log, cfg.DNSDisableRecursiveCheck))
 
 	runDaemon("renew", cfg.Interval, *once, log, runner.Run)
 	return nil

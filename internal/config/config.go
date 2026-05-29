@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -80,6 +81,40 @@ func intDefault(name string, def int) (int, error) {
 	return n, nil
 }
 
+// boolDefault parses a boolean env var (per strconv.ParseBool: 1/t/true/0/f/
+// false, etc.), falling back to def when unset.
+func boolDefault(name string, def bool) (bool, error) {
+	v := os.Getenv(name)
+	if v == "" {
+		return def, nil
+	}
+	b, err := strconv.ParseBool(v)
+	if err != nil {
+		return false, fmt.Errorf("%s: %w", name, err)
+	}
+	return b, nil
+}
+
+// splitList parses a comma-separated env var into a slice, trimming spaces and
+// dropping empties. It returns nil when the var is unset/empty.
+func splitList(name string) []string {
+	v := os.Getenv(name)
+	if v == "" {
+		return nil
+	}
+	parts := strings.Split(v, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
 // Central holds the configuration for Postgres-backed central commands
 // (add/remove/list). It requires KNIT_DB_URL.
 type Central struct {
@@ -105,6 +140,14 @@ type Renew struct {
 	ACMEEmail     string
 	ThresholdDays int
 	Interval      time.Duration
+
+	// DNS-01 propagation-precheck controls (all optional). DNSResolvers and
+	// DNSTimeout configure lego's process-global recursive resolver used by the
+	// precheck and zone/CNAME lookups; DNSDisableRecursiveCheck drops the
+	// cache-prone recursive check entirely and relies on the authoritative one.
+	DNSResolvers             []string
+	DNSTimeout               time.Duration
+	DNSDisableRecursiveCheck bool
 }
 
 // LoadRenew reads the configuration for renew.
@@ -125,14 +168,25 @@ func LoadRenew() (*Renew, error) {
 	if err != nil {
 		return nil, err
 	}
+	dnsTimeout, err := durationDefault("KNIT_DNS_TIMEOUT", 0)
+	if err != nil {
+		return nil, err
+	}
+	disableRecursive, err := boolDefault("KNIT_DNS_DISABLE_RECURSIVE_CHECK", false)
+	if err != nil {
+		return nil, err
+	}
 	return &Renew{
-		DBURL:         dbURL,
-		ValkeyURL:     valkeyURL,
-		IndexKey:      stringDefault("KNIT_INDEX_KEY", DefaultIndexKey),
-		ACMEDirectory: stringDefault("KNIT_ACME_DIRECTORY", DefaultACMEDirectory),
-		ACMEEmail:     os.Getenv("KNIT_ACME_EMAIL"),
-		ThresholdDays: threshold,
-		Interval:      interval,
+		DBURL:                    dbURL,
+		ValkeyURL:                valkeyURL,
+		IndexKey:                 stringDefault("KNIT_INDEX_KEY", DefaultIndexKey),
+		ACMEDirectory:            stringDefault("KNIT_ACME_DIRECTORY", DefaultACMEDirectory),
+		ACMEEmail:                os.Getenv("KNIT_ACME_EMAIL"),
+		ThresholdDays:            threshold,
+		Interval:                 interval,
+		DNSResolvers:             splitList("KNIT_DNS_RESOLVERS"),
+		DNSTimeout:               dnsTimeout,
+		DNSDisableRecursiveCheck: disableRecursive,
 	}, nil
 }
 

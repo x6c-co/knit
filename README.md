@@ -46,6 +46,9 @@ CGO_ENABLED=0 go build -o knit .
 | `KNIT_ACME_EMAIL` | account email, used on first registration | — | `renew` |
 | `KNIT_RENEW_THRESHOLD_DAYS` | renew when fewer than N days of validity remain | `30` | `renew` |
 | `KNIT_RENEW_INTERVAL` | `renew` daemon check interval | `12h` | `renew` |
+| `KNIT_DNS_RESOLVERS` | comma-separated `ip[:port]` recursive resolvers for the DNS-01 propagation precheck (see below) | system `resolv.conf` | `renew` |
+| `KNIT_DNS_TIMEOUT` | per-query DNS client timeout for the precheck (not the propagation wait) | lego default (10s) | `renew` |
+| `KNIT_DNS_DISABLE_RECURSIVE_CHECK` | skip the cache-prone recursive precheck; rely on the authoritative check (see below) | `false` | `renew` |
 | `KNIT_WATCH_INTERVAL` | `watch` Valkey poll interval | `60s` | `watch` |
 | `KNIT_RELOAD_CMD` | command `watch` runs once per pass when any cert changed; empty = no reload | (empty) | `watch` |
 | `KNIT_LOG_LEVEL` | `debug` / `info` / `warn` / `error` | `info` | all |
@@ -113,6 +116,46 @@ Operational notes: deSEC propagation can lag — lego polls and you can extend t
 wait with `DESEC_PROPAGATION_TIMEOUT`. A too-narrow deSEC token policy is the
 most common live failure. Verify the whole path with a dry run against Let's
 Encrypt **staging** (`KNIT_ACME_DIRECTORY`) before switching to production.
+
+### DNS-01 propagation precheck
+
+Before telling the ACME server the challenge is ready, lego runs a local
+propagation check. By default it requires the `_acme-challenge` TXT to be visible
+on **both** the recursive resolvers from `/etc/resolv.conf` and the zone's
+authoritative nameservers. The recursive step is the fragile one: a caching
+resolver (e.g. a public recursor like `1.1.1.1`) can return a **stale** TXT from
+a previous attempt, so the precheck either passes on stale data or fights the
+cache on rapid retries. knit exposes the relevant lego controls:
+
+- **`KNIT_DNS_RESOLVERS`** — override the recursive resolvers used by the precheck
+  and by zone/CNAME lookups. Point them at uncached/authoritative resolution, e.g.
+  the deSEC authoritative servers:
+
+  ```sh
+  KNIT_DNS_RESOLVERS=ns1.desec.io,ns2.desec.org   # bare host → :53 appended
+  ```
+
+  Caveat for CNAME-delegated certs: the resolvers you set must be able to resolve
+  the **entire** `_acme-challenge` CNAME chain. Authoritative-only servers can
+  only follow a chain that stays within their zones.
+
+- **`KNIT_DNS_DISABLE_RECURSIVE_CHECK=true`** — skip the cache-prone recursive
+  **TXT comparison** and rely on the authoritative check, which queries the
+  domain's own nameservers (uncached) for the challenge record. This is the most
+  direct fix for the stale-cache failure. lego still resolves the challenge CNAME
+  through the system recursive resolver, so this also sidesteps the CNAME-chain
+  caveat above (a static CNAME is harmless to cache).
+
+- **`KNIT_DNS_TIMEOUT`** — the per-query DNS client timeout for the precheck. This
+  is **not** the propagation wait; to wait longer for the record to appear, use
+  the provider's own knob (e.g. `DESEC_PROPAGATION_TIMEOUT`).
+
+The provider's propagation/polling/TTL knobs already pass straight through to lego
+from the environment — no knit setting needed. For deSEC: `DESEC_PROPAGATION_TIMEOUT`
+(default 120s), `DESEC_POLLING_INTERVAL` (default 4s), and `DESEC_TTL`. Note that
+deSEC enforces a per-account **minimum TTL of 3600s** by default, so lowering
+`DESEC_TTL` below that to shrink the challenge-record collision window is rejected
+by the API unless you've raised your account's TTL limit.
 
 ## Subcommands
 

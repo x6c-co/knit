@@ -102,11 +102,14 @@ One Valkey key per managed cert (`valkey_key`). The value is a single JSON objec
 | `KNIT_ACME_EMAIL` | account email (for registration) | — | `renew` |
 | `KNIT_RENEW_THRESHOLD_DAYS` | renew when fewer than N days of validity remain | `30` | `renew` |
 | `KNIT_RENEW_INTERVAL` | `renew` daemon check interval | `12h` | `renew` |
+| `KNIT_DNS_RESOLVERS` | comma-separated `ip[:port]` recursive resolvers for the DNS-01 propagation precheck (and zone/CNAME lookups). Point at uncached/authoritative resolution to avoid stale-cache precheck failures. | system `resolv.conf` | `renew` |
+| `KNIT_DNS_TIMEOUT` | per-query DNS client timeout for the precheck (not the propagation wait — that is the provider's own knob, e.g. `DESEC_PROPAGATION_TIMEOUT`). | lego default (10s) | `renew` |
+| `KNIT_DNS_DISABLE_RECURSIVE_CHECK` | skip the cache-prone recursive precheck and rely on the (uncached) authoritative check. | `false` | `renew` |
 | `KNIT_WATCH_INTERVAL` | `watch` Valkey poll interval | `60s` | `watch` |
 | `KNIT_RELOAD_CMD` | command `watch` runs once per pass when any cert changed (e.g. `caddy reload`). If empty, no reload is run. | (empty) | `watch` |
 | `KNIT_LOG_LEVEL` | `debug`/`info`/`warn`/`error` | `info` | all |
 
-DNS provider credentials are passed via the environment per lego's conventions (e.g. `DESEC_TOKEN`, `CLOUDFLARE_DNS_API_TOKEN`).
+DNS provider credentials are passed via the environment per lego's conventions (e.g. `DESEC_TOKEN`, `CLOUDFLARE_DNS_API_TOKEN`). Provider propagation/polling/TTL knobs (e.g. `DESEC_PROPAGATION_TIMEOUT`, `DESEC_POLLING_INTERVAL`, `DESEC_TTL`) also pass straight through to lego from the environment. (deSEC enforces a per-account minimum TTL of 3600s by default, so `DESEC_TTL` cannot be set below that without raising the account's TTL limit.)
 
 `watch` must not require `KNIT_DB_URL` or any Postgres-related configuration.
 
