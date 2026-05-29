@@ -1,0 +1,30 @@
+version: 2
+updates:
+  # Go module dependencies.
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      # Collapse the many low-risk minor/patch bumps (lego pulls in a large
+      # transitive tree) into a single PR; keep majors separate for review.
+      go-minor-patch:
+        update-types:
+          - minor
+          - patch
+
+  # GitHub Actions used by the workflows.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "ci(deps)"
+    groups:
+      actions:
+        update-types:
+          - minor
+          - patch
