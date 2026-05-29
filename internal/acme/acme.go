@@ -133,6 +133,10 @@ func (c *Client) Obtain(ctx context.Context, provider string, domains []string) 
 	res, err := c.lc.Certificate.Obtain(ctx, certificate.ObtainRequest{
 		Domains: domains,
 		Bundle:  true, // fullchain = leaf + intermediates
+		// lego v5 dropped the Config.Certificate.KeyType default (v4 had one);
+		// the key type must be set per request or Obtain fails with
+		// "the key type is missing".
+		KeyType: certcrypto.EC256,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("obtain certificate for %v: %w", domains, err)
