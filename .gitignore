@@ -1,3 +1,5 @@
 /knit
 knit
 *.test
+/dist/
+coverage.out

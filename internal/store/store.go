@@ -196,7 +196,7 @@ func (s *Store) SaveAccount(ctx context.Context, a Account) error {
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	if _, err := tx.Exec(ctx, `DELETE FROM knit_acme_account`); err != nil {
 		return fmt.Errorf("clear acme account: %w", err)
 	}

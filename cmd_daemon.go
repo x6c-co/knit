@@ -35,7 +35,7 @@ func runRenew(args []string, log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	defer vk.Close()
+	defer func() { _ = vk.Close() }()
 
 	runner := renew.NewRunner(s, vk, log, cfg.ThresholdDays,
 		renew.ACMEIssuerFactory(s, cfg.ACMEDirectory, cfg.ACMEEmail, log))
@@ -60,7 +60,7 @@ func runWatch(args []string, log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	defer vk.Close()
+	defer func() { _ = vk.Close() }()
 
 	w := watch.New(vk, cfg.ReloadCmd, log)
 	runDaemon("watch", cfg.Interval, *once, log, w.RunOnce)

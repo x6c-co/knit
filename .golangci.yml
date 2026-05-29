@@ -1,0 +1,40 @@
+version: "2"
+
+linters:
+  # Start from golangci-lint's curated default set (errcheck, govet,
+  # ineffassign, staticcheck, unused) and add a few high-value linters.
+  default: standard
+  enable:
+    - bodyclose
+    - errorlint
+    - misspell
+    - revive
+    - unconvert
+    - unparam
+    - usestdlibvars
+  settings:
+    errcheck:
+      # Writes to stdout/stderr/tabwriter: errors are not actionable here, and
+      # buffered tabwriter errors surface at the checked Flush call.
+      exclude-functions:
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+    revive:
+      rules:
+        - name: exported
+          disabled: true # godoc comments are present where they matter; do not force on every symbol
+  exclusions:
+    generated: lax
+    rules:
+      # Test helpers intentionally ignore errors on setup/teardown calls and
+      # may parameterize for readability even when current callers pass one value.
+      - path: _test\.go
+        linters:
+          - errcheck
+          - unparam
+
+formatters:
+  enable:
+    - gofmt
+    - goimports

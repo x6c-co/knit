@@ -14,6 +14,13 @@ import (
 	"github.com/x6c-co/knit/internal/config"
 )
 
+// Build metadata, injected at release time by goreleaser via -ldflags.
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+)
+
 const usage = `knit — ACME cert management and distribution
 
 Usage: knit <command> [flags]
@@ -28,6 +35,9 @@ Central commands (require KNIT_DB_URL):
 Node command (requires only KNIT_VALKEY_URL):
   watch    Poll Valkey and write changed certs to disk, running KNIT_RELOAD_CMD
            on change. Daemon by default; --once for one pass.
+
+Other:
+  version  Print build version information
 
 Run "knit <command> -h" for command-specific flags.
 `
@@ -54,6 +64,9 @@ func main() {
 		err = runRenew(args, log)
 	case "watch":
 		err = runWatch(args, log)
+	case "version", "--version", "-v":
+		fmt.Printf("knit %s (commit %s, built %s)\n", version, commit, date)
+		return
 	case "-h", "--help", "help":
 		fmt.Fprint(os.Stdout, usage)
 		return
