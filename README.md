@@ -65,6 +65,55 @@ switching providers needs no code change. For example:
 See the [lego DNS provider docs](https://go-acme.github.io/lego/dns/) for the
 variable names of other providers.
 
+### CNAME delegation
+
+You can issue certificates for domains **without giving knit any access to those
+domains' DNS**, by delegating the ACME challenge to a zone you do control (e.g. a
+deSEC-hosted `a5t.dev`). This is handled entirely at the lego/DNS layer — knit
+needs no special configuration and no code changes.
+
+How it works: lego follows CNAMEs when solving the DNS-01 challenge (on by
+default; only `LEGO_DISABLE_CNAME_SUPPORT=true` turns it off). The DNS provider
+writes the TXT record at the CNAME-resolved name, so the record lands in your
+delegation zone rather than in the certificate's own domain.
+
+Setup:
+
+1. **Add the cert in knit using the REAL domain(s)** — never the delegation
+   target. lego discovers the target at runtime by following the CNAME.
+
+   ```sh
+   knit add --domains example.com --provider desec \
+     --valkey-key knit:example.com \
+     --cert-path /etc/ssl/example/fullchain.pem \
+     --key-path  /etc/ssl/example/privkey.pem
+   ```
+
+2. **Create a static CNAME, once, in each real domain's zone** (out of band —
+   knit/lego never creates or touches this). Note the source label is
+   `_acme-challenge` (hyphen):
+
+   ```dns
+   _acme-challenge.example.com.  CNAME  _acme-challenge.example.acme.a5t.dev.
+   ```
+
+   The target name is your choice since it lives in your zone; only the
+   `_acme-challenge.<domain>` source label is fixed by ACME.
+
+3. **Point the provider credentials at the delegation zone.** Set `DESEC_TOKEN`
+   to a token that controls `a5t.dev` (deSEC resolves whether `a5t.dev` or
+   `acme.a5t.dev` is the registered domain). The token's scope must allow both
+   reading the responsible zone and writing the `_acme-challenge.*` TXT RRset.
+
+With that in place, `knit renew` issues normally: lego writes the TXT into your
+deSEC delegation zone, and the certificate is issued for `example.com` even
+though knit has no access to `example.com`'s DNS.
+
+Operational notes: deSEC propagation can lag — lego polls and you can extend the
+wait with `DESEC_PROPAGATION_TIMEOUT`. A too-narrow deSEC token policy is the
+most common live failure. Verify the whole path with a dry run against Let's
+Encrypt **staging** (`KNIT_ACME_DIRECTORY`) before switching to production.
+
 ## Subcommands
 
 ### `knit add`
