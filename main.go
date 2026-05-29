@@ -79,13 +79,18 @@ func runDaemon(name string, interval time.Duration, once bool, log loggerLike, p
 		}
 	}
 
-	doPass()
-	if once {
-		return
-	}
-
+	// Install the signal handler before the first pass so that a signal arriving
+	// during it (e.g. a multi-minute initial ACME issuance) is handled
+	// gracefully: the in-flight pass runs on a non-cancelled context and
+	// finishes, then we exit. Without this, a signal during the first pass would
+	// hit Go's default behavior and kill the process mid-operation.
 	sigCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	doPass()
+	if once || sigCtx.Err() != nil {
+		return
+	}
 
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
